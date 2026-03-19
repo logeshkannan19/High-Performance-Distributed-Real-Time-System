@@ -1,8 +1,8 @@
-FROM node:20-alpine AS builder
+FROM node:20-alpine
 
 WORKDIR /app
 
-RUN apk add --no-cache dumb-init
+RUN apk add --no-cache dumb-init tini
 
 COPY package*.json ./
 RUN npm ci && npm cache clean --force
@@ -10,22 +10,10 @@ RUN npm ci && npm cache clean --force
 COPY tsconfig.json ./
 COPY src ./src
 
-RUN npm install -g typescript && npx tsc
-
-FROM node:20-alpine
-
-WORKDIR /app
-
-RUN apk add --no-cache dumb-init tini
-
 ENV NODE_ENV=production
 ENV PORT=3000
 
-COPY package*.json ./
-RUN npm ci --only=production && npm cache clean --force
-
-COPY --from=0 /app/dist ./dist
-COPY tsconfig.json ./
+RUN npx tsc
 
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S nodejs -u 1001 && \
