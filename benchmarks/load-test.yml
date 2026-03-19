@@ -1,0 +1,88 @@
+config:
+  target: "http://localhost:3000"
+  phases:
+    - duration: 60
+      arrivalRate: 10
+      name: "Warm up"
+    - duration: 120
+      arrivalRate: 50
+      name: "Sustained load"
+    - duration: 60
+      arrivalRate: 100
+      name: "Stress test"
+    - duration: 30
+      arrivalRate: 200
+      name: "Spike test"
+
+scenarios:
+  - name: "WebSocket Connections"
+    weight: 40
+    flow:
+      - loop:
+          count: 100
+        steps:
+          - ws: "wss://localhost:3000/socket.io/?EIO=4&transport=websocket"
+          - think: 5
+          - send:
+              data: '{"type":"ping","timestamp":{{$timestamp}}}'
+          - think: 2
+          - send:
+              data: '{"type":"message","content":"Load test message"}'
+          - think: 1
+
+  - name: "SSE Connections"
+    weight: 30
+    flow:
+      - get:
+          url: "http://localhost:3000/api/stream?userId=loadtest-{{$randomNumber(1000,9999)}}"
+          followRedirects: true
+          shareCookie: true
+          capture:
+            - header: "set-cookie"
+              as: "session"
+          afterRedirects: "accept"
+        expect:
+          - statusCode: 200
+          - hasHeader: "content-type"
+            header: "content-type"
+            contains: "text/event-stream"
+
+  - name: "HTTP API Health"
+    weight: 20
+    flow:
+      - get:
+          url: "http://localhost:3000/health"
+        expect:
+          - statusCode: 200
+      - get:
+          url: "http://localhost:3000/stats"
+        expect:
+          - statusCode: 200
+      - get:
+          url: "http://localhost:3000/metrics"
+        expect:
+          - statusCode: 200
+
+  - name: "Broadcast API"
+    weight: 10
+    flow:
+      - post:
+          url: "http://localhost:3000/api/broadcast"
+          json:
+            event: "load_test"
+            data:
+              message: "Load test broadcast"
+              timestamp: "{{$timestamp}}"
+          expect:
+            - statusCode: 200
+
+processor: "./benchmarks/processor.js"
+
+variables:
+  - randomIp: "function() { return Math.floor(Math.random() * 255) + '.' + Math.floor(Math.random() * 255) + '.' + Math.floor(Math.random() * 255) + '.' + Math.floor(Math.random() * 255); }"
+
+ensure:
+  p99Latency:
+    threshold: 500
+  errorRate:
+    threshold: 1
