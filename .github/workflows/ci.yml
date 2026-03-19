@@ -73,15 +73,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push
+      - name: Build Docker Image
         uses: docker/build-push-action@v5
         with:
           context: .
           file: docker/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/high-performance-distributed-real-time-system:latest
-            ghcr.io/${{ github.repository_owner }}/high-performance-distributed-real-time-system:${{ github.sha }}
+          push: false
+          load: true
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
