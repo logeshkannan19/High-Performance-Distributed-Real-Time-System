@@ -18,8 +18,12 @@ class Application {
 
   async start(): Promise<void> {
     try {
-      await redisManager.connect();
-      logger.info('Redis connected');
+      try {
+        await redisManager.connect();
+        logger.info('Redis connected');
+      } catch (error) {
+        logger.warn('Redis connection failed - running in standalone mode', { error: String(error) });
+      }
 
       this.httpServer.on('request', this.apiGateway.getApp());
 
