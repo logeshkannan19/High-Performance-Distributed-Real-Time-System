@@ -1,12 +1,12 @@
-import Redis from 'ioredis';
-import { config } from '../config/index.js';
-import { logger } from '../utils/logger.js';
-import type { PubSubMessage } from '../types/index.js';
+import { Redis, type Redis as RedisClient } from 'ioredis';
+import { config } from '../../config/index';
+import { logger } from '../../utils/logger';
+import type { PubSubMessage } from '../../types/index';
 
 export class RedisManager {
-  private client: Redis;
-  private subscriber: Redis;
-  private publisher: Redis;
+  private client: RedisClient;
+  private subscriber: RedisClient;
+  private publisher: RedisClient;
   private isConnected: boolean = false;
   private reconnectAttempts: number = 0;
   private maxReconnectAttempts: number = 10;
@@ -43,16 +43,14 @@ export class RedisManager {
   }
 
   private setupEventHandlers(): void {
-    const redisOptions = { connection: { strategy: 'recurring' as const } };
-    
     this.client.on('connect', () => {
       logger.info('Redis Client: Connected');
       this.isConnected = true;
       this.reconnectAttempts = 0;
     });
 
-    this.client.on('error', (error) => {
-      logger.error('Redis Client Error:', error);
+    this.client.on('error', (error: Error) => {
+      logger.error('Redis Client Error', { error: error.message });
     });
 
     this.client.on('close', () => {
@@ -60,12 +58,12 @@ export class RedisManager {
       this.isConnected = false;
     });
 
-    this.subscriber.on('error', (error) => {
-      logger.error('Redis Subscriber Error:', error);
+    this.subscriber.on('error', (error: Error) => {
+      logger.error('Redis Subscriber Error', { error: error.message });
     });
 
-    this.publisher.on('error', (error) => {
-      logger.error('Redis Publisher Error:', error);
+    this.publisher.on('error', (error: Error) => {
+      logger.error('Redis Publisher Error', { error: error.message });
     });
   }
 
@@ -78,7 +76,7 @@ export class RedisManager {
       ]);
       logger.info('Redis: All connections established');
     } catch (error) {
-      logger.error('Redis: Failed to connect', error);
+      logger.error('Redis: Failed to connect', { error: String(error) });
       throw error;
     }
   }
@@ -94,6 +92,10 @@ export class RedisManager {
 
   isHealthy(): boolean {
     return this.isConnected;
+  }
+
+  getReconnectAttempts(): number {
+    return this.reconnectAttempts;
   }
 
   // Cache operations
@@ -145,6 +147,11 @@ export class RedisManager {
     if (!this.eventHandlers.has(channel)) {
       this.eventHandlers.set(channel, new Set());
       await this.subscriber.subscribe(channel);
+      
+      this.subscriber.on('message', (ch: string, msg: string) => {
+        const parsedMessage = JSON.parse(msg) as PubSubMessage;
+        this.eventHandlers.get(ch)?.forEach(h => h(parsedMessage));
+      });
     }
     this.eventHandlers.get(channel)?.add(handler);
   }

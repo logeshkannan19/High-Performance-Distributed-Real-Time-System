@@ -1,9 +1,9 @@
 import { createServer, Server as HTTPServer } from 'http';
-import { APIGateway } from './core/api/APIGateway.js';
-import { WebSocketServer } from './core/websocket/WebSocketServer.js';
-import { redisManager } from './core/redis/RedisManager.js';
-import { logger } from './utils/logger.js';
-import { config } from './config/index.js';
+import { APIGateway } from './core/api/APIGateway';
+import { WebSocketServer } from './core/websocket/WebSocketServer';
+import { redisManager } from './core/redis/RedisManager';
+import { logger } from './utils/logger';
+import { config } from './config/index';
 
 class Application {
   private httpServer: HTTPServer;

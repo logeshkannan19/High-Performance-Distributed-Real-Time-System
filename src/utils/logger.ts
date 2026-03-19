@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 export const createLogger = (module: string) => {
   const log = (level: string, message: string, meta?: Record<string, unknown>): void => {
     const timestamp = new Date().toISOString();

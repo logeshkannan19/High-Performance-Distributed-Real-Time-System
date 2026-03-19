@@ -2,10 +2,10 @@ import express, { Express, Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
-import { config } from '../../config/index.js';
-import { logger } from '../../utils/logger.js';
-import { redisManager } from '../redis/RedisManager.js';
-import { sseServer } from '../sse/SSEServer.js';
+import { config } from '../../config/index';
+import { logger } from '../../utils/logger';
+import { redisManager } from '../redis/RedisManager';
+import { sseServer } from '../sse/SSEServer';
 import { RateLimiterMemory } from 'rate-limiter-flexible';
 
 interface RequestLog {
@@ -78,21 +78,23 @@ export class APIGateway {
       
       try {
         const result = await this.rateLimiter.consume(identifier);
-        res.setHeader('X-RateLimit-Remaining', result.remainingPoints);
-        res.setHeader('X-RateLimit-Reset', new Date(Date.now() + result.msBeforeNext || 0).toISOString());
+        res.setHeader('X-RateLimit-Remaining', String(result.remainingPoints));
+        const msBeforeNext = result.msBeforeNext ?? 0;
+        res.setHeader('X-RateLimit-Reset', new Date(Date.now() + msBeforeNext).toISOString());
         next();
       } catch {
+        const penaltyResult = await this.rateLimiter.penalty(identifier);
         res.status(429).json({
           error: 'Too Many Requests',
           message: 'Rate limit exceeded. Please try again later.',
-          retryAfter: Math.ceil((await this.rateLimiter.penalty(identifier)) / 1000),
+          retryAfter: Math.ceil(penaltyResult.msBeforeNext / 1000),
         });
       }
     });
   }
 
   private setupRoutes(): void {
-    this.app.get('/health', (req: Request, res: Response) => {
+    this.app.get('/health', (_req: Request, res: Response) => {
       res.json({
         status: 'healthy',
         timestamp: new Date().toISOString(),
@@ -100,7 +102,7 @@ export class APIGateway {
       });
     });
 
-    this.app.get('/health/detailed', async (req: Request, res: Response) => {
+    this.app.get('/health/detailed', async (_req: Request, res: Response) => {
       const memory = process.memoryUsage();
       res.json({
         status: 'healthy',
@@ -117,7 +119,7 @@ export class APIGateway {
       });
     });
 
-    this.app.get('/stats', (req: Request, res: Response) => {
+    this.app.get('/stats', (_req: Request, res: Response) => {
       res.json({
         connections: sseServer.getClientCount(),
         timestamp: new Date().toISOString(),
@@ -173,7 +175,7 @@ export class APIGateway {
       }
     });
 
-    this.app.get('/api/online/users', async (req: Request, res: Response) => {
+    this.app.get('/api/online/users', async (_req: Request, res: Response) => {
       try {
         const users = await redisManager.getOnlineUsers();
         const count = await redisManager.getOnlineCount();
@@ -183,7 +185,7 @@ export class APIGateway {
       }
     });
 
-    this.app.get('/metrics', (req: Request, res: Response) => {
+    this.app.get('/metrics', (_req: Request, res: Response) => {
       const memory = process.memoryUsage();
       const cpu = process.cpuUsage();
       
@@ -208,7 +210,7 @@ export class APIGateway {
       });
     });
 
-    this.app.get('/', (req: Request, res: Response) => {
+    this.app.get('/', (_req: Request, res: Response) => {
       res.json({
         name: 'Real-Time Distributed System',
         version: '1.0.0',
@@ -236,7 +238,7 @@ export class APIGateway {
       });
     });
 
-    this.app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
+    this.app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
       logger.error('Unhandled error', {
         error: err.message,
         stack: err.stack,

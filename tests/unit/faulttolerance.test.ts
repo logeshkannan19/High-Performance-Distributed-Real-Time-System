@@ -1,3 +1,4 @@
+import { jest, describe, it, expect, beforeEach } from '@jest/globals';
 import { CircuitBreaker } from '../../src/core/faulttolerance/CircuitBreaker';
 import { withRetry } from '../../src/core/faulttolerance/Retry';
 

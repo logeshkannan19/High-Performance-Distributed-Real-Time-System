@@ -1,16 +1,17 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Server as HTTPServer } from 'http';
-import { config } from '../../config/index.js';
-import { logger } from '../../utils/logger.js';
-import { redisManager } from '../redis/RedisManager.js';
+import { config } from '../../config/index';
+import { logger } from '../../utils/logger';
+import { redisManager } from '../redis/RedisManager';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import type { Connection, Message, Room, EventPayload } from '../../types/index.js';
+import type { Connection, Message, Room, EventPayload } from '../../types/index';
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
   username?: string;
   roomId?: string;
+  lastActivity?: Date;
 }
 
 export class WebSocketServer extends EventEmitter {
@@ -19,7 +20,6 @@ export class WebSocketServer extends EventEmitter {
   private rooms: Map<string, Room> = new Map();
   private connectionCounter: number = 0;
   private messageCounter: number = 0;
-  private bytesTransferred: number = 0;
   private startTime: number = Date.now();
 
   constructor(httpServer: HTTPServer) {
@@ -33,7 +33,6 @@ export class WebSocketServer extends EventEmitter {
       },
       pingInterval: config.websocket.pingInterval,
       pingTimeout: config.websocket.pingTimeout,
-      maxPayload: config.websocket.maxPayload,
       perMessageDeflate: config.websocket.perMessageDeflate ? {
         threshold: 1024,
       } : false,
@@ -103,8 +102,9 @@ export class WebSocketServer extends EventEmitter {
       });
 
       await redisManager.subscribe('notification', (message) => {
-        if (message.message.targetUserId) {
-          this.sendToUser(message.message.targetUserId, 'notification', message.message);
+        const msgData = message.message as { targetUserId?: string };
+        if (msgData.targetUserId) {
+          this.sendToUser(msgData.targetUserId, 'notification', message.message);
         } else {
           this.io.emit('notification', message);
         }
@@ -281,7 +281,7 @@ export class WebSocketServer extends EventEmitter {
     socket.emit('unsubscribed', { channel });
   }
 
-  private async authenticateToken(token: string): Promise<{ id: string; username: string } | null> {
+  private async authenticateToken(_token: string): Promise<{ id: string; username: string } | null> {
     try {
       return { id: 'user-123', username: 'anonymous' };
     } catch {
@@ -290,7 +290,7 @@ export class WebSocketServer extends EventEmitter {
   }
 
   sendToUser(userId: string, event: string, data: unknown): void {
-    for (const [socketId, socket] of this.connections) {
+    for (const [_socketId, socket] of this.connections) {
       if (socket.userId === userId) {
         socket.emit(event, data);
       }
@@ -299,7 +299,7 @@ export class WebSocketServer extends EventEmitter {
 
   broadcastToRoom(roomId: string, event: string, data: unknown, exclude?: string): void {
     if (exclude) {
-      socket.to(roomId).emit(event, data);
+      this.io.to(roomId).emit(event, data);
     } else {
       this.io.to(roomId).emit(event, data);
     }

@@ -1,11 +1,12 @@
 import dotenv from 'dotenv';
+import os from 'os';
 dotenv.config();
 
 export const config = {
   node: {
     env: process.env.NODE_ENV || 'development',
     port: parseInt(process.env.PORT || '3000', 10),
-    instanceId: process.env.INSTANCE_ID || `${require('os').hostname()}-${process.pid}`,
+    instanceId: process.env.INSTANCE_ID || `${os.hostname()}-${process.pid}`,
   },
   
   redis: {

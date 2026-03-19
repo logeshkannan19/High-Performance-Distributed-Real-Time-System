@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import { config } from '../../config/index.js';
-import { logger } from '../../utils/logger.js';
-import { redisManager } from '../redis/RedisManager.js';
+import { config } from '../../config/index';
+import { logger } from '../../utils/logger';
+import { redisManager } from '../redis/RedisManager';
 import { EventEmitter } from 'events';
 
 interface SSEClient {
@@ -17,7 +17,6 @@ export class SSEServer extends EventEmitter {
   private clients: Map<string, SSEClient> = new Map();
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private cleanupInterval: NodeJS.Timeout | null = null;
-  private reconnectWindow: number = 30000;
 
   constructor() {
     super();
@@ -35,8 +34,9 @@ export class SSEServer extends EventEmitter {
       });
 
       await redisManager.subscribe('sse:notification', (message) => {
-        if (message.message.targetUserId) {
-          this.sendToUser(message.message.targetUserId, 'notification', message.message);
+        const msgData = message.message as { targetUserId?: string; event?: string; data?: unknown };
+        if (msgData.targetUserId) {
+          this.sendToUser(msgData.targetUserId, 'notification', message.message);
         }
       });
 
@@ -77,10 +77,12 @@ export class SSEServer extends EventEmitter {
 
     for (const [id, client] of this.clients) {
       if (now - client.connectedAt.getTime() > timeout) {
-        try {
-          client.response.end();
-        } catch {}
-        this.clients.delete(id);
+      try {
+        client.response.end();
+      } catch (error) {
+        logger.debug('Error ending SSE client response', { error });
+      }
+      this.clients.delete(id);
         logger.debug('Cleaned up inactive SSE client', { clientId: id });
       }
     }
@@ -193,9 +195,10 @@ export class SSEServer extends EventEmitter {
     return sent;
   }
 
-  private broadcastToMatching(message: { message: { event?: string; data?: unknown; category?: string } }): void {
-    if (message.message.event && message.message.data) {
-      this.broadcast(message.message.event, message.message.data, message.message.category);
+  private broadcastToMatching(message: { message: unknown }): void {
+    const msgData = message.message as { event?: string; data?: unknown; category?: string };
+    if (msgData.event && msgData.data) {
+      this.broadcast(msgData.event, msgData.data, msgData.category);
     }
   }
 
@@ -248,7 +251,9 @@ export class SSEServer extends EventEmitter {
     for (const client of this.clients.values()) {
       try {
         client.response.end();
-      } catch {}
+      } catch (error) {
+        logger.debug('Error ending SSE client response during shutdown', { error });
+      }
     }
 
     this.clients.clear();
